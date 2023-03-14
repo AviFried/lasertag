@@ -1,21 +1,26 @@
 import socket
-import time
-import socket
 import threading
 import time
 
 HOST = "0.0.0.0"  # Standard loopback interface address (localhost)
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 
+
 class ClientThread(threading.Thread):
     clients = []
     lock = threading.Lock()
 
-    def __init__(self, conn, addr):
+    def __init__(self, conn, addr, id, team, lives, ammo):
         threading.Thread.__init__(self)
         self.conn = conn
         self.addr = addr
         print(f"Connected by {self.addr}")
+        self.team = team
+        self.lives = lives
+        self.ammo = ammo
+        self.score = 0
+        self.ip = addr[0]
+        self.id = id
 
     def run(self):
         with ClientThread.lock:
@@ -23,21 +28,23 @@ class ClientThread(threading.Thread):
 
         while True:
             data = self.conn.recv(1024)
-            if not data:
-                break
             recieved = data.decode()
             print(recieved)
-            for player in playerList:
-                #print(player.ip, self.addr[0])
-                if player.ip == self.addr[0]:
-                    for recieve in recieved.split():
-                        print(recieve)
-                        if recieve == "fire":
-                            #print("Shot")
-                            player.shot()
-                            print(player.getStrings())
-            #self.conn.sendall(data)
-            #self.conn.send(b"Test\n")
+
+            for recieve in recieved.split():
+                # print(recieve)
+                if recieve == "fire":
+                    # print("Shot")
+                    self.shot()
+                    # print(player.getStrings())
+                for player2 in ClientThread.clients:
+                    print(recieve, "hit", self.id)
+                    if player2.id == recieve:
+                        player2.kill()
+                        self.killed()
+
+            # self.conn.sendall(data)
+            # self.conn.send(b"Test\n")
 
         with ClientThread.lock:
             ClientThread.clients.remove(self)
@@ -45,32 +52,6 @@ class ClientThread(threading.Thread):
         print(f"Disconnected from {self.addr}")
         self.conn.close()
         del self
-
-class BroadcastThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        while True:
-            with ClientThread.lock:
-                for client in ClientThread.clients:
-                    #print(client.addr)
-                    for player in playerList:
-                        #print(player.ip, client.addr[0])
-                        if player.ip == client.addr[0]:
-                            string = player.getStrings() + "\n"
-                            #print(string)
-                            client.conn.send(string.encode())
-
-            time.sleep(3)
-
-class Player:
-    def __init__(self, ip, team, lives, ammo):
-        self.team = team
-        self.lives = lives
-        self.ammo = ammo
-        self.score = 0
-        self.ip = ip
 
     def killed(self):
         self.lives -= 1
@@ -104,20 +85,37 @@ class Player:
             data = ""
         return data
 
-player1 = Player("10.2.94.142", "Blue", 5, 20)
-player2 = Player("10.2.94.205", "Red", 5, 20)
-playerList = [player1, player2]
+
+class BroadcastThread(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+    def run(self):
+        while True:
+            with ClientThread.lock:
+                for client in ClientThread.clients:
+                    # print(client.addr)
+                    string = client.getStrings() + "\n"
+                    # print(string)
+                    client.conn.send(string.encode())
+
+            time.sleep(1)
+
 
 while True:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
         s.listen()
         conn, addr = s.accept()
-        client_thread = ClientThread(conn, addr)
+        if addr[0] == "10.2.94.142":
+            client_thread = ClientThread(conn, addr, "a80", "Blue", 5, 20)
+        elif addr[0] == "10.2.94.205":
+            client_thread = ClientThread(conn, addr, "a70", "Blue", 5, 20)
+        else:
+            print("Unknown IP address:", addr[0])
         client_thread.start()
 
     # Start broadcast thread after accepting first client
-    if len(ClientThread.clients) == 1:
+    if len(ClientThread.clients) >= 1:
         broadcast_thread = BroadcastThread()
         broadcast_thread.start()
-
