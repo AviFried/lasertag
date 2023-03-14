@@ -6,7 +6,7 @@ import socket
 #UDP_PORT = 5005
 import time
 
-UDP_IP = "192.168.7.249"
+UDP_IP = "10.2.94.171"
 UDP_PORT = 2390
 MESSAGE = b"ID Request"
 
